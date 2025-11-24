@@ -75,6 +75,12 @@ to train the model. This will train Imagenet from scratch, do a muP grid search 
 
 This uses multiple techniques and codebases I have developed over the year. Its a natural mixture of [min-max-IN-dit](https://github.com/cloneofsimo/min-max-in-dit), [min-max-gpt](https://github.com/cloneofsimo/min-max-gpt), [ez-muP](https://github.com/cloneofsimo/ezmup)
 
+# Acknowledgements
+
+- https://github.com/ku-dmlab/Adaptive-Timestep-Sampler
+- https://github.com/cloneofsimo/minRF
+
+
 # Citations
 
 If you use this material, please cite this repository with the following:

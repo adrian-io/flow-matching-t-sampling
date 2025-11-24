@@ -5,3 +5,4 @@ wandb
 vae_mds
 ckpt
 flow
+.venv

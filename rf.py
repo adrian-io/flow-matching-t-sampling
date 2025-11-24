@@ -8,12 +8,16 @@ class RF:
     def __init__(self, model, ln=True):
         self.model = model
         self.ln = ln
+        sel
 
     def forward(self, x, cond):
         b = x.size(0)
+        ### t-Sampling
+        # logit-normal distribution
         if self.ln:
             nt = torch.randn((b,)).to(x.device)
             t = torch.sigmoid(nt)
+        elif self
         else:
             t = torch.rand((b,)).to(x.device)
         texp = t.view([b, *([1] * len(x.shape[1:]))])
@@ -77,7 +81,7 @@ if __name__ == "__main__":
         channels = 3
         model = DiT_Llama(
             channels, 32, dim=256, n_layers=10, n_heads=8, num_classes=10
-        ).cuda()
+        ).to("mps")
 
     else:
         dataset_name = "mnist"
@@ -91,50 +95,105 @@ if __name__ == "__main__":
         )
         channels = 1
         model = DiT_Llama(
-            channels, 32, dim=64, n_layers=6, n_heads=4, num_classes=10
-        ).cuda()
+            # channels, 32, dim=64, n_layers=6, n_heads=4, num_classes=10
+            channels, 32, dim=64, n_layers=4, n_heads=2, num_classes=10
+        ).to("mps")
 
     model_size = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Number of parameters: {model_size}, {model_size / 1e6}M")
 
-    rf = RF(model)
-    optimizer = optim.Adam(model.parameters(), lr=5e-4)
+    rf = RF(model, ln=False)
+    LR = 5e-4
+    optimizer = optim.Adam(model.parameters(), lr=LR)
     criterion = torch.nn.MSELoss()
 
     mnist = fdatasets(root="./data", train=True, download=True, transform=transform)
-    dataloader = DataLoader(mnist, batch_size=256, shuffle=True, drop_last=True)
+    BATCH_SIZE = 128
+    # dataloader = DataLoader(mnist, batch_size=256, shuffle=True, drop_last=True)
+    dataloader = DataLoader(mnist, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
 
-    wandb.init(project=f"rf_{dataset_name}")
+    wandb.init(project=f"rf_{dataset_name}", config={"model_size": model_size, "lr": LR, "batch_size": BATCH_SIZE})
 
-    for epoch in range(100):
+
+    import csv
+
+    # Initialize CSV file
+    csv_file = "sample_log.csv"
+    with open(csv_file, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["epoch", "batch", "t_bin", "t", "t_loss"])
+
+    for epoch in range(5):
         lossbin = {i: 0 for i in range(10)}
         losscnt = {i: 1e-6 for i in range(10)}
-        for i, (x, c) in tqdm(enumerate(dataloader)):
-            x, c = x.cuda(), c.cuda()
+        for batch_idx, (x, c) in tqdm(enumerate(dataloader)):
+            x, c = x.to("mps"), c.to("mps")
             optimizer.zero_grad()
             loss, blsct = rf.forward(x, c)
             loss.backward()
+            
+
+            # -------------------------------------------------
+            # Collect gradient norms per t-bin
+            # -------------------------------------------------
+            gradients_t = []
+            for p in model.parameters():
+                if p.grad is not None:
+                    gradients_t.append(p.grad.detach().abs().mean().item())
+            # store as a single number or array
+            grad_scalar = sum(gradients_t) / len(gradients_t)
+
             optimizer.step()
 
-            wandb.log({"loss": loss.item()})
-
-            # count based on t
+            # distribute loss into 10 equally sized t-bins
             for t, l in blsct:
                 lossbin[int(t * 10)] += l
                 losscnt[int(t * 10)] += 1
+                
+            # Log each sample's t, t_loss, and t_bin
+            with open(csv_file, mode="a", newline="") as file:
+                writer = csv.writer(file)
+                for t, t_loss in blsct:
+                    t_bin = int(t * 10)  # Calculate t_bin
+                    writer.writerow([epoch, batch_idx, t_bin, t.item(), t_loss])
+
+            # ------------------------------------------
+            # UPGRADED W&B LOGGING PER EPOCH-BATCH
+            # ------------------------------------------
+            wandb.log({
+                "epoch": epoch,
+                "batch": batch_idx,
+                # scalar batch loss
+                "batch_loss": loss.item(),
+
+                # sum of per-t-bin loss list for this batch
+                "lossbin_t": [lossbin[i] for i in range(10)],
+                # count per-t-bin for this batch
+                "losscnt_t": [losscnt[i] for i in range(10)],
+                # average per-t-bin loss list for this batch
+                "loss_t": [(lossbin[i] / losscnt[i]) for i in range(10)],
+
+                # gradient information
+                "grad_norm_t": grad_scalar,     # if array: log list too
+                # "grad_norm_per_param": gradients_t  # optional
+
+                # expected loss reduction
+                "elr_t": loss,
+            })
 
         # log
         for i in range(10):
             print(f"Epoch: {epoch}, {i} range loss: {lossbin[i] / losscnt[i]}")
 
-        wandb.log({f"lossbin_{i}": lossbin[i] / losscnt[i] for i in range(10)})
+        # wandb.log({f"lossbin_{i}": lossbin[i] / losscnt[i] for i in range(10)})
+   
 
         rf.model.eval()
         with torch.no_grad():
-            cond = torch.arange(0, 16).cuda() % 10
+            cond = torch.arange(0, 16).to("mps") % 10
             uncond = torch.ones_like(cond) * 10
 
-            init_noise = torch.randn(16, channels, 32, 32).cuda()
+            init_noise = torch.randn(16, channels, 32, 32).to("mps")
             images = rf.sample(init_noise, cond, uncond)
             # image sequences to gif
             gif = []

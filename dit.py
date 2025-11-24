@@ -57,7 +57,7 @@ class LabelEmbedder(nn.Module):
     def token_drop(self, labels, force_drop_ids=None):
         if force_drop_ids is None:
             drop_ids = torch.rand(labels.shape[0]) < self.dropout_prob
-            drop_ids = drop_ids.cuda()
+            drop_ids = drop_ids.to("mps")
             drop_ids = drop_ids.to(labels.device)
         else:
             drop_ids = force_drop_ids == 1
