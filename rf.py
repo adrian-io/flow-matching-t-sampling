@@ -1,25 +1,46 @@
 # implementation of Rectified Flow for simple minded people like me.
 import argparse
-
 import torch
 
 
 class RF:
-    def __init__(self, model, ln=True):
+    def __init__(self, model, t_sampling="ln"):
         self.model = model
-        self.ln = ln
-        sel
+        self.t_sampling = t_sampling
+
+    def t_sampling_method(self, b, device):
+        """
+        Implements t-sampling methods: uniform, logit-normal (ln), sinusoidal, and quadratic.
+
+        Uniform:
+            t ~ U(0, 1)
+        Logit-Normal:
+            t = sigmoid(nt), where nt ~ N(0, 1)
+        Sinusoidal:
+            t = 0.5 + 0.5 * sin(pi * (u - 0.5)), where u ~ U(0, 1)
+        Quadratic:
+            t = u^2, where u ~ U(0, 1)
+        """
+        if self.t_sampling == "ln":
+            nt = torch.randn((b,)).to(device)
+            t = torch.sigmoid(nt)  # Logit-normal distribution
+        elif self.t_sampling == "sinusoidal":
+            u = torch.rand((b,)).to(device)
+            t = 0.5 + 0.5 * torch.sin(torch.pi * (u - 0.5))  # Sinusoidal distribution
+        elif self.t_sampling == "quadratic":
+            u = torch.rand((b,)).to(device)
+            t = u ** 2  # Quadratic distribution
+        else:  # Default to uniform
+            t = torch.rand((b,)).to(device)  # Uniform distribution
+
+        # Clip t values to [0, 1)
+        t = torch.clamp(t, max=1 - 1e-6)
+        return t
 
     def forward(self, x, cond):
         b = x.size(0)
-        ### t-Sampling
-        # logit-normal distribution
-        if self.ln:
-            nt = torch.randn((b,)).to(x.device)
-            t = torch.sigmoid(nt)
-        elif self
-        else:
-            t = torch.rand((b,)).to(x.device)
+        t = self.t_sampling_method(b, x.device)
+
         texp = t.view([b, *([1] * len(x.shape[1:]))])
         z1 = torch.randn_like(x)
         zt = (1 - texp) * x + texp * z1
@@ -102,7 +123,7 @@ if __name__ == "__main__":
     model_size = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Number of parameters: {model_size}, {model_size / 1e6}M")
 
-    rf = RF(model, ln=False)
+    rf = RF(model, t_sampling="sinusoidal")
     LR = 5e-4
     optimizer = optim.Adam(model.parameters(), lr=LR)
     criterion = torch.nn.MSELoss()
