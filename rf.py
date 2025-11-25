@@ -123,7 +123,7 @@ if __name__ == "__main__":
     model_size = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Number of parameters: {model_size}, {model_size / 1e6}M")
 
-    rf = RF(model, t_sampling="sinusoidal")
+    rf = RF(model, t_sampling="quadratic")
     LR = 5e-4
     optimizer = optim.Adam(model.parameters(), lr=LR)
     criterion = torch.nn.MSELoss()
@@ -153,7 +153,6 @@ if __name__ == "__main__":
             loss, blsct = rf.forward(x, c)
             loss.backward()
             
-
             # -------------------------------------------------
             # Collect gradient norms per t-bin
             # -------------------------------------------------
