@@ -1,0 +1,46 @@
+# config.yaml - hyperparameters and flags for RF + ATS integration
+device: "auto"                       # auto|cpu|cuda|mps
+dataset: "mnist"                     # mnist | cifar
+batch_size: 128
+epochs: 5
+seed: 42
+
+# model
+channels: 1
+image_size: 32
+model_dim: 64
+model_layers: 4
+model_heads: 2
+
+# optimizers
+lr_model: 5.0e-4
+lr_policy: 1.0e-3
+policy_entropy_coef: 1.0e-2
+
+# sampler options (paper notation: a, b -> Beta(a,b) ~ pi_phi)
+t_sampling: "adaptive"               # choices: adaptive, uniform, ln, sinusoidal, quadratic
+timesteps: 100                       # for mapping continuous t into discrete if desired
+
+# policy architecture
+policy_hidden: 128
+
+# policy update options
+update_policy_every: 1               # run policy update every k model updates (f_S in paper)
+use_true_delta: false                # If true, compute loss reduction Delta_t^k (more expensive)
+use_approx_delta: true               # If true, use cheap approximation reward (e.g. -L)
+delta_S_size: 3                      # |S| in Algorithm 2 (used if computing approximate Delta with subset)
+queue_size_Q: 20                     # |Q| used in Algorithm 2's queue
+
+# gradient variance diagnostics
+grad_var_mode: "full"                # choices: norm, full
+grad_var_batches_per_t: 4
+eval_T: 100                          # number of t bins when evaluating gradient variance/loss curves
+
+# training misc
+log_csv: "sample_log.csv"
+wandb_project: "rf_ats"
+save_every: 1                        # epochs
+contents_dir: "contents"
+
+# safety/compute tradeoffs
+eval_subset_size: 128
